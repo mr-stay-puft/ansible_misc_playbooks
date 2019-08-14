@@ -1,0 +1,22 @@
+---
+all:
+  hosts:
+    localhost:
+      ansible_host: 127.0.0.1
+      ansible_connection: local
+#Home Assistant
+home_assistant_hosts:
+  hosts:
+    homebot.mydomain.com:
+      ansible_user: homebot_user
+      ansible_connection: ssh
+      host_docker_container: home-assistant_docker
+      domain: homebot.mydomain.com
+      host_docker_image: homeassistant/home-assistant
+      host_docker_image_tag: 0.97.2
+      host_docker_volumes:
+        - "/HomeBot/hass/config:/config"
+        - "/etc/localtime:/etc/localtime:ro"
+        - "/etc/letsencrypt/live/homebot.mydomain.com/:/certs/:ro"
+      host_docker_devices:
+        - "/dev/ttyACM0:/dev/ttyACM0"
