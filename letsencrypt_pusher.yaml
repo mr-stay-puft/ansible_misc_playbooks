@@ -1,0 +1,96 @@
+---
+#Ensure you run "ansible_playbook letsencrypt_pusher.yaml -k --tags <prefered_tag> -i inventory.yaml"
+- hosts: target_hosts
+  #Requires the following VARS: host_docker_container, domain
+  #
+  vars:
+    path_to_new_fullchain_pem: "~/path/to/fullchain.pem"
+    path_to_new_privkey_pem: "~/path/to/privkey.pem"
+  tasks:
+
+  - name: Debug Docker Vars
+    debug:
+      var: host_docker_container
+      verbosity: 2
+  
+  - name: Create Cert Directory if it Doesnt Exist
+    become: yes
+    file:
+      path: /etc/letsencrypt/live/{{ domain }}/
+      state: directory
+      owner: "{{ ansible_user }}"
+      group: "{{ ansible_user }}"
+      mode: 0755
+    tags:
+      - all
+      - unifi
+  
+  - name: Copy Current letsencrypt fullchain.pem
+    copy:
+      src: "{{ path_to_new_fullchain_pem }}"
+      dest: /etc/letsencrypt/live/{{ domain }}/fullchain.pem
+      owner: "{{ ansible_user }}"
+      group: "{{ ansible_user }}"
+      mode: 0775
+    tags:
+      - all
+      - unifi
+  
+  - name: Copy Current letsencrypt privkey.pem
+    copy:
+      src: "{{ path_to_new_privkey_pem }}"
+      dest: /etc/letsencrypt/live/{{ domain }}/privkey.pem
+      owner: "{{ ansible_user }}"
+      group: "{{ ansible_user }}"
+      mode: 0775
+    tags:
+      - all
+      - unifi
+  
+  - name: Backup Previous Unifi Keystore
+    become: yes
+    command: cp /var/lib/unifi/keystore /var/lib/unifi/keystore.backup.{{ ansible_date_time.date }}
+    tags:
+      - unifi
+  
+  - name: Convert Cert to PKCS12 format and Assign unifi Credentials
+    become: yes
+    command: openssl pkcs12 -export -inkey /etc/letsencrypt/live/{{ domain }}/privkey.pem -in /etc/letsencrypt/live/{{ domain }}/fullchain.pem -out /etc/letsencrypt/live/{{ domain }}/fullchain.p12 -name unifi -password pass:unifi
+    tags:
+      - unifi
+  
+  - name: Use keytool to Import PKCS12 into UniFi aircontrolenterprise Keystore
+    become: yes
+    command: keytool -importkeystore -deststorepass aircontrolenterprise -destkeypass aircontrolenterprise -destkeystore /var/lib/unifi/keystore -srckeystore /etc/letsencrypt/live/{{ domain }}/fullchain.p12 -srcstoretype PKCS12 -srcstorepass unifi -alias unifi -noprompt
+    tags:
+      - unifi
+  
+  #This Doesnt work for my Pi
+  #- name: Restart service unifi
+  #  systemd:
+  #    name: unifi
+  #    state: restarted
+  
+  - name: Restart service unifi
+    become: yes
+    command: service unifi restart
+    tags:
+      - unifi
+
+#UniFi keytool Credit:
+## Author: Frank Gabriel, 15.09.2018, Kalle Lilja and others
+#
+## Set the Domain name, valid DNS entry must exist
+#DOMAIN="www.yourdomain.dk"
+#
+## Backup previous keystore
+#cp /var/lib/unifi/keystore /var/lib/unifi/keystore.backup.$(date +%F_%R)
+#
+## Convert cert to PKCS12 format
+#openssl pkcs12 -export -inkey /etc/letsencrypt/live/${DOMAIN}/privkey.pem -in /etc/letsencrypt/live/${DOMAIN}/fullchain.pem -out /etc/letsencrypt/live/${DOMAIN}/fullchain.p12 -name unifi -password pass:unifi
+#
+## Import certificate
+#keytool -importkeystore -deststorepass aircontrolenterprise -destkeypass aircontrolenterprise -destkeystore /var/lib/unifi/keystore -srckeystore /etc/letsencrypt/live/${DOMAIN}/fullchain.p12 -srcstoretype PKCS12 -srcstorepass unifi -alias unifi -noprompt
+#
+## Restart the UniFi controller
+#service unifi restart
