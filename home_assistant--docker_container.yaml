@@ -52,7 +52,8 @@
     tags:
       - home_assistant_restart
 
-  #This May Break if the container is not running. :(
+  #This fails if the expected container is not running.
+  #Stopped also kills the container instead of stopping it (to start again later). There is a stop action that can be edited for this module.
   - name: Stop the Home Assistant container
     docker_container:
       name: "{{ host_docker_container }}"
@@ -96,7 +97,7 @@
     tags:
       - home_assistant_ssl_push
 
-  - name: Create/Start the Home Assistant container
+  - name: Create/Start/Restart the Home Assistant container
     docker_container:
       name: "{{ host_docker_container }}"
       restart_policy: unless-stopped
