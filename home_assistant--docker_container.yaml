@@ -1,0 +1,113 @@
+---
+#Run With "ansible_playbook home_assistant--docker_container.yaml --tags <prefered_tag> -i inventory.yaml"
+- hosts: home_assistant_hosts
+  tasks:
+  - name: Install Packages from APT
+    become: yes
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+      cache_valid_time: 3600 #Only run "update_cache=yes" if the last one is more than N seconds agos
+    vars:
+      packages:
+      - python-pip #Need Py2 docker module for ansible module docker_container to function.
+      #Currently, only P2 docker is supported.
+      #- python3-pip
+      - docker-ce
+    tags:
+      - home_assistant_init
+
+  - name: Ensure docker for Python2 is installed.
+    pip:
+      name: "{{ item }}"
+      executable: pip
+    with_items:
+      - docker
+    tags:
+      - home_assistant_init
+
+  #Currently, only P2 docker is supported.
+  #- name: Ensure docker for Python3 is installed.
+  #  pip:
+  #    name: "{{ item }}"
+  #    executable: pip3
+  #  with_items:
+  #    - docker
+  #  tags:
+  #    - home_assistant_init
+  
+  - name: Restart the Home Assistant container
+    docker_container:
+      name: "{{ host_docker_container }}"
+      restart_policy: unless-stopped
+      privileged: yes
+      image: "{{ host_docker_image }}:{{ host_docker_image_tag }}"
+      state: started
+      restart: yes
+      volumes: "{{ host_docker_volumes }}"
+      network_mode: host
+      devices: "{{ host_docker_devices }}"
+    when: host_docker_container is defined
+    tags:
+      - home_assistant_restart
+
+  #This May Break if the container is not running. :(
+  - name: Stop the Home Assistant container
+    docker_container:
+      name: "{{ host_docker_container }}"
+      state: stopped
+    when: host_docker_container is defined
+    tags:
+      - home_assistant_ssl_push
+      - home_assistant_version_upgrade
+
+  - name: Create Cert Directory if it Doesnt Exist for "{{ domain }}"
+    become: yes
+    file:
+      path: /etc/letsencrypt/live/{{ domain }}/
+      state: directory
+      owner: "{{ ansible_user }}"
+      group: "{{ ansible_user }}"
+      #mode: 0775
+      mode: 0754
+    tags:
+      - home_assistant_ssl_push
+
+  - name: Copy Current letsencrypt fullchain.pem for "{{ domain }}"
+    copy:
+      src: "{{ local_path_to_ha_fullchain_pem }}"
+      dest: /etc/letsencrypt/live/{{ domain }}/fullchain.pem
+      owner: "{{ ansible_user }}"
+      group: "{{ ansible_user }}"
+      #mode: 0775
+      mode: 0754
+    tags:
+      - home_assistant_ssl_push
+
+  - name: Copy Current letsencrypt privkey.pem for "{{ domain }}"
+    copy:
+      src: "{{ local_path_to_ha_privkey_pem }}"
+      dest: /etc/letsencrypt/live/{{ domain }}/privkey.pem
+      owner: "{{ ansible_user }}"
+      group: "{{ ansible_user }}"
+      #mode: 0775
+      mode: 0754
+    tags:
+      - home_assistant_ssl_push
+
+  - name: Create/Start the Home Assistant container
+    docker_container:
+      name: "{{ host_docker_container }}"
+      restart_policy: unless-stopped
+      privileged: yes
+      image: "{{ host_docker_image }}:{{ host_docker_image_tag }}"
+      state: started
+      volumes: "{{ host_docker_volumes }}"
+      network_mode: host
+      devices: "{{ host_docker_devices }}"
+    when: host_docker_container is defined
+    tags:
+      - home_assistant_init
+      - home_assistant_ssl_push
+      - home_assistant_version_upgrade
