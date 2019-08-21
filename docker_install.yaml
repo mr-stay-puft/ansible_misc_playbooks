@@ -1,4 +1,4 @@
-- hosts: docker_servers
+- hosts: vm_hosts
   gather_facts: yes
   become: yes
   tasks:
@@ -45,3 +45,9 @@
       vars:
         packages:
         - docker-ce
+
+    - name: Add user '{{ansible_user}}' to 'docker' group.
+      become: yes
+      user:
+        name: "{{ansible_user}}"
+        group: docker
