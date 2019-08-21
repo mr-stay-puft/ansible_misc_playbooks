@@ -1,6 +1,6 @@
 # ansible_misc_playbooks
 
-* home_assistant--docker_container.yaml
+## home_assistant--docker_container.yaml
   * `--tags`
     * `home_assistant_init`
 
@@ -39,3 +39,16 @@
         host_docker_devices:
           - "/dev/ttyACM0:/dev/ttyACM0"
   ```
+
+## docker_install.yaml
+  >Example: `ansible_playbook docker_install.yaml -i inventory.yaml -K` where `-K` is a prompt for the sudo password.
+  
+  Install Docker using the steps outlined on [docs.docker for docker-ce on linux](https://docs.docker.com/install/linux/docker-ce/ubuntu/).
+
+  Tested On:
+
+  - Ubuntu
+
+    - Server
+
+      - 18.04.3 LTS
