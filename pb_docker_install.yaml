@@ -1,8 +1,32 @@
-- hosts: vm_hosts
+- hosts: new_docker_hosts
   gather_facts: yes
   become: yes
+  ### Intended to Support Ubuntu, Debian, and Raspbian
+  ###
+  ### ansible_lsb.id == "Raspbian" ansible_architecture == "armv7l"
   tasks:
     
+    - name: Debug for Raspbian OS
+      debug:
+        msg: "Raspbian device OS detected."
+        verbosity: 2
+      when: ansible_lsb.id == "Raspbian"
+    
+    - name: Download Docker convenience script for Raspbian.
+      ### Per https://docs.docker.com/engine/install/debian/#install-using-the-repository
+      get_url:
+        dest: /tmp/get-docker.sh
+        url: https://get.docker.com
+      when: (ansible_lsb.id is defined) and (ansible_lsb.id == "Raspbian")
+    
+    - name: Run Docker convenience script for Raspbian
+      #become: yes
+      shell: sh /tmp/get-docker.sh >> /tmp/docker_install.log
+      #args:
+      #  chdir: /tmp
+      #  creates: docker_install.log
+      when: (ansible_lsb.id is defined) and (ansible_lsb.id == "Raspbian")
+
     - name: Install Packages Neccesary to Add Docker-CE Keys
       #become: yes
       apt:
@@ -15,27 +39,65 @@
         - curl
         - apt-transport-https
         - ca-certificates
-        - curl
         - gnupg-agent
         - software-properties-common
+      when: (ansible_distribution == 'Debian' or ansible_distribution == 'Ubuntu') and (ansible_lsb.id is defined and ansible_lsb.id != "Raspbian")
+    
+    - name: Remove Deprecated Docker package versions
+      ### Per https://docs.docker.com/engine/install/debian/#uninstall-old-versions
+      ###     https://docs.docker.com/engine/install/ubuntu/#uninstall-old-versions
+      #become: yes
+      apt:
+        name: "{{ packages }}"
+        state: absent
+        update_cache: yes
+        cache_valid_time: 3600 #Only run "update_cache=yes" if the last one is more than N seconds ago
+      vars:
+        packages:
+          - docker
+          - docker-engine
+          - docker.io
+          - containerd
+          - runc
+      when: ansible_distribution == 'Debian' or ansible_distribution == 'Ubuntu'
 
-    - name: Download and Add Docker-CE Key
+    - name: Download and Add Docker-CE Key for Ubuntu
       #become: yes
       apt_key:
           url: https://download.docker.com/linux/ubuntu/gpg
           state: present
           id: 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
-    
-    - name: Add Docker Repo
+      when: ansible_distribution == 'Ubuntu'
+
+    - name: Download and Add Docker-CE Key for Debian
+      #become: yes
+      apt_key:
+          url: https://download.docker.com/linux/debian/gpg
+          state: present
+          id: 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
+      when: (ansible_distribution == 'Debian') and (ansible_lsb.id is defined and ansible_lsb.id != 'Raspbian')
+
+    - name: Add Docker Ubuntu Repo
       #become: yes
       apt_repository:
           repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ansible_distribution_release}} stable"
           state: present
-          update_cache: yes
+          update_cache: no
           mode: 0644
           validate_certs: yes
+      when: ansible_distribution == 'Ubuntu'
+
+    - name: Add Docker Debian Repo
+      #become: yes
+      apt_repository:
+          repo: "deb [arch=amd64] https://download.docker.com/linux/debian {{ansible_distribution_release}} stable"
+          state: present
+          update_cache: no
+          mode: 0644
+          validate_certs: yes
+      when: (ansible_distribution == 'Debian') and (ansible_lsb.id is defined and ansible_lsb.id != 'Raspbian')
           
-    - name: Install Docker-CE
+    - name: Install Docker-CE and docker-compose
       #become: yes
       apt:
         name: "{{ packages }}"
@@ -45,9 +107,27 @@
       vars:
         packages:
         - docker-ce
+        - docker-compose
+      when: (ansible_distribution == 'Debian' or ansible_distribution == 'Ubuntu') and (ansible_lsb.id is defined and ansible_lsb.id != "Raspbian")
+
+    - name: Check for 'docker' group.
+      shell: "getent group | cut -d: -f1"
+      register: groups_check
+
+    - name: Debug for groups
+      debug:
+        msg: "{{groups_check.stdout_lines}}"
+        verbosity: 2
+
+    - name: Debug for group docker
+      debug:
+        msg: "The group 'docker' exists on this machine."
+        verbosity: 2
+      when: ('docker' in groups_check.stdout_lines)
 
     - name: Add user '{{ansible_user}}' to 'docker' group.
       become: yes
       user:
         name: "{{ansible_user}}"
         group: docker
+      when: ('docker' in groups_check.stdout_lines)
